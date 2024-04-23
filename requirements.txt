@@ -1,0 +1,10 @@
+channels
+channels_redis
+uvicorn[standard]
+django
+gunicorn
+psycopg2-binary
+gpt4all
+gtts
+tensorflow>=2.0
+python-socketio

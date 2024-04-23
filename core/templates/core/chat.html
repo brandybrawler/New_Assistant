@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.11/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body, textarea, input, button {
+            font-family: 'Roboto', sans-serif;
+        }
+        .bg-tech {
+            background: linear-gradient(to bottom right, #0f0c29, #302b63, #24243e);
+        }
+        .text-glow {
+            text-shadow: 0 0 8px rgba(0, 150, 255, 0.8);
+        }
+        .rounded-lg {
+            border-radius: 15px;
+        }
+        .button-glow {
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 100, 255, 0.6);
+        }
+        .button-glow:hover {
+            transform: translateY(-2px);
+        }
+        .soft-shadow {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-tech font-sans leading-normal tracking-normal text-white">
+
+    <div class="container mx-auto my-5 p-5">
+        <div class="w-full p-6 rounded-lg bg-gray-800 shadow-lg">
+            <h1 class="text-3xl font-semibold text-blue-300 text-center text-glow">Voice Assistant Chat</h1>
+            <div id="status" class="text-center my-3 text-white font-bold p-2 rounded-lg bg-gray-700">Not Connected</div>
+            <div class="loader hidden mx-auto my-5"></div>
+            <div class="error-message text-red-400 text-center hidden"></div>
+            <div class="recognition-feedback bg-gray-700 text-blue-200 text-center p-3 rounded-lg hidden">Listening...</div>
+            
+            <textarea id="chat-log" class="w-full p-3 h-64 bg-gray-700 border border-gray-600 rounded-lg shadow-inner mt-4 text-white" readonly aria-live="polite"></textarea>
+            
+            <div class="flex items-center my-4">
+                <input id="chat-message-input" type="text" class="flex-grow p-3 border border-gray-600 rounded-lg shadow bg-gray-700 text-white" placeholder="Type your message here..." aria-label="Message Input">
+                <button id="chat-message-submit" class="ml-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg button-glow soft-shadow">Send</button>
+            </div>
+
+            <div class="flex justify-between">
+                <button id="start" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg button-glow">Start Voice Input</button>
+                <button id="stop" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg button-glow" disabled>Stop Voice Input</button>
+            </div>
+            
+            <audio id="response-audio" controls hidden class="mt-4 w-full"></audio>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.11/dist/tailwind.min.js"></script>
+    <script>
+        const chatSocket = new WebSocket('ws://' + window.location.host + '/ws/chat/');
+        const startButton = document.getElementById('start');
+        const stopButton = document.getElementById('stop');
+        const inputField = document.getElementById('chat-message-input');
+        const chatLog = document.getElementById('chat-log');
+        const audioElement = document.getElementById('response-audio');
+        const statusIndicator = document.getElementById('status');
+        const loader = document.querySelector('.loader');
+        const errorMessage = document.querySelector('.error-message');
+        const recognitionFeedback = document.querySelector('.recognition-feedback');
+        
+        let isAudioPlaying = false;
+
+        chatSocket.onopen = function() {
+            statusIndicator.textContent = 'Connected';
+            statusIndicator.className = 'text-center my-3 text-white font-bold p-2 rounded-lg bg-green-600';
+        };
+    
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            chatLog.value += 'Server: ' + data.message + '\n';
+            if (data.audio_url) {
+                audioElement.src = data.audio_url;
+                audioElement.hidden = false;
+                audioElement.play();
+                isAudioPlaying = true;
+                recognition.stop();
+            }
+        };
+    
+        audioElement.onended = function() {
+            audioElement.hidden = true;
+            audioElement.src = '';
+            if (!isAudioPlaying) {
+                startButton.disabled = false;
+                recognition.start();
+            }
+            isAudioPlaying = false;
+        };
+    
+        audioElement.oninterrupted = audioElement.onended;
+    
+        chatSocket.onclose = function(e) {
+            statusIndicator.textContent = 'Not Connected';
+            statusIndicator.className = 'text-center my-3 text-white font-bold p-2 rounded-lg bg-red-600';
+            errorMessage.textContent = 'Connection closed unexpectedly';
+            errorMessage.style.display = 'block';
+            console.error('Chat socket closed unexpectedly');
+        };
+    
+        document.getElementById('chat-message-submit').onclick = function(e) {
+            const message = inputField.value;
+            chatSocket.send(JSON.stringify({'message': message}));
+            inputField.value = '';
+            chatLog.value += 'You: ' + message + '\n';
+        };
+    
+        var recognition;
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+        } else if ('SpeechRecognition' in window) {
+            recognition = new SpeechRecognition();
+        }
+        
+        recognition.continuous = true;
+        recognition.interimResults = true;
+    
+        recognition.onresult = function(event) {
+            let interim_transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    let final_transcript = event.results[i][0].transcript;
+                    chatLog.value += 'You: ' + final_transcript + '\n';
+                    chatSocket.send(JSON.stringify({'message': final_transcript}));
+                } else {
+                    interim_transcript += event.results[i][0].transcript;
+                }
+            }
+            inputField.value = interim_transcript;
+        };
+    
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error', event.error);
+            stopButton.disabled = true;
+            startButton.disabled = false;
+            errorMessage.textContent = 'Speech recognition error: ' + event.error;
+            errorMessage.style.display = 'block';
+        };
+    
+        recognition.onend = function() {
+            stopButton.disabled = true;
+            startButton.disabled = false;
+            recognitionFeedback.style.display = 'none';
+        };
+    
+        startButton.onclick = function() {
+            recognition.start();
+            this.disabled = true;
+            stopButton.disabled = false;
+            recognitionFeedback.style.display = 'block';
+        };
+    
+        stopButton.onclick = function() {
+            recognition.stop();
+            this.disabled = true;
+            startButton.disabled = false;
+            recognitionFeedback.style.display = 'none';
+        };
+    </script>
+</body>
+</html>

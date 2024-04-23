@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=voice_assistant
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+
+  redis:
+    image: "redis:6.2-alpine"
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    command: gunicorn voice_assistant.asgi:application --timeout 120 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+      - llm
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/voice_assistant
+      - REDIS_URL=redis://redis:6379/0
+
+  llm:
+    build:
+      context: ./LLM
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./LLM:/usr/src/app
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all  # You can remove this if no GPU resources are needed
+
+networks:
+  default:
+    driver: bridge
+
+volumes:
+  postgres_data:
