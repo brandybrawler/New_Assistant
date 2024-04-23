@@ -1,0 +1,4 @@
+# use this on the url
+
+http://localhost:3000/?auth_uri=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZXhwIjoxNzE4OTY1MjM3fQ.sNdtqBGxYGxHFou3sTB7ero89-bpEbzrgAzTfFSv9LA&is_auth=true&color=red&user_uri=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZXhwIjoxNzE4OTY0NTM5fQ.4pwAHvuAG5XpInOW4VUuqiZcrIYfdDlBa2GPDlOPwiU
+

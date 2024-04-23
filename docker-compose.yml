@@ -38,8 +38,16 @@ services:
       - "5000:5000"
     volumes:
       - ./LLM:/usr/src/app
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all  # You can remove this if no GPU resources are needed
+
+  # ngrok:
+  #   image: wernight/ngrok
+  #   ports:
+  #     - "4040:4040"  # Ngrok web interface
+  #   command: ngrok http web:8000
+  #   environment:
+  #     - NGROK_AUTHTOKEN=1QaW2n0xr95608bnUmxzQz9Z7VO_37ARL3v3T1t8Xo1fh4qna
+  #   depends_on:
+  #     - web
 
 networks:
   default:

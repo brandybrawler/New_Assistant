@@ -71,7 +71,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.11/dist/tailwind.min.js"></script>
     <script>
-        const chatSocket = new WebSocket('ws://' + window.location.host + '/ws/chat/');
+        const chatSocket = new WebSocket('wss://' + window.location.host + '/ws/chat/');
         const startButton = document.getElementById('start');
         const stopButton = document.getElementById('stop');
         const inputField = document.getElementById('chat-message-input');

@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     # Add any necessary packages here, e.g., 'gcc', 'musl-dev', etc.
     && rm -rf /var/lib/apt/lists/*
 
+    Run
 # Install Python dependencies
 COPY requirements.txt /code/
 RUN pip install --upgrade pip \
@@ -24,3 +25,4 @@ COPY . /code/
 
 # Run the application
 CMD ["gunicorn", "--worker-class", "uvicorn.workers.UvicornWorker", "voice_assistant.asgi:application", "--bind", "0.0.0.0:8000"]
+ 
