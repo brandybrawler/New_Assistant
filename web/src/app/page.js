@@ -36,15 +36,20 @@ const Page = () => {
   const [recognition, setRecognition] = useState(null);
   const [status, setStatus] = useState("Not Connected");
   const [errorMessage, setErrorMessage] = useState("");
+  const [currentSpokenMessage, setCurrentSpokenMessage] = useState("");
+
 
   ///NEW ASSISTANT LOGIC
   ///NEW ASSISTANT LOGIC
   ///NEW ASSISTANT LOGIC
 
-  let urlParams
-  if(typeof window !== 'undefined') urlParams = new URLSearchParams(window.location.search);
-  const authTokenUser = urlParams?.get("user_uri");
-  const authTokenTenant = urlParams?.get("auth_uri");
+  let authTokenUser = "";
+  let authTokenTenant = "";
+  if (typeof window !== "undefined") {
+    const urlParams = new URLSearchParams(window.location.search);
+    authTokenUser = urlParams.get("user_uri");
+    authTokenTenant = urlParams.get("auth_uri");
+  }
 
   useEffect(() => {
     // Function to fetch community details
@@ -74,9 +79,8 @@ const Page = () => {
     // Function to fetch user details
     const getUserDetails = async () => {
       try {
-        let urlParams
-        if(typeof window !== 'undefined') urlParams = new URLSearchParams(window.location.search);
-        const authTokenUser = urlParams?.get("user_uri");
+        const urlParams = new URLSearchParams(window.location.search);
+        const authTokenUser = urlParams.get("user_uri");
         const apiUrl = `https://core.proximaai.co/api/auth/decodeusertoken/?token=${authTokenUser}`;
 
         const response = await fetch(apiUrl, {
@@ -358,11 +362,15 @@ const Page = () => {
     setFollowUpRequired(isChecked); // Update followUpRequired state with checkbox status
   };
 
+  ///NEW ASSISTANT LOGIC
+  ///NEW ASSISTANT LOGIC
+  ///NEW ASSISTANT LOGIC
 
   useEffect(() => {
-    const chatSocket = new WebSocket(
-      "wss://a528-102-212-236-164.ngrok-free.app/ws/chat/"
-    );
+    const chatSocket = new WebSocket('wss://1474-102-212-236-199.ngrok-free.app/chat/', {
+    origin: 'https://1474-102-212-236-199.ngrok-free.app'
+});
+
 
     chatSocket.onopen = () => {
       setStatus("Connected");
@@ -388,25 +396,52 @@ const Page = () => {
     };
 
     // Set up the SpeechRecognition instance
-    let recognitionInstance
-    if(typeof window !== 'undefined') recognitionInstance = new (window.SpeechRecognition ||
+    const recognitionInstance = new (window.SpeechRecognition ||
       window.webkitSpeechRecognition)();
     recognitionInstance.continuous = true;
     recognitionInstance.interimResults = true;
 
-    recognitionInstance.onresult = (event) => {
-      let interimTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          const finalTranscript = event.results[i][0].transcript;
-          setChatLog((prevLog) => prevLog + `You: ${finalTranscript}\n`);
-          chatSocket.send(JSON.stringify({ message: finalTranscript }));
-        } else {
-          interimTranscript += event.results[i][0].transcript;
-        }
-      }
-      setInputMessage(interimTranscript);
-    };
+    // recognitionInstance.onresult = (event) => {
+    //   let interimTranscript = "";
+    //   for (let i = event.resultIndex; i < event.results.length; ++i) {
+    //     if (event.results[i].isFinal) {
+    //       const finalTranscript = event.results[i][0].transcript;
+    //       setChatLog((prevLog) => prevLog + `You: ${finalTranscript}\n`);
+    //       chatSocket.send(JSON.stringify({ message: finalTranscript }));
+    //     } else {
+    //       interimTranscript += event.results[i][0].transcript;
+    //     }
+    //   }
+    //   setInputMessage(interimTranscript);
+    // };
+
+    // recognitionInstance.onresult = (event) => {
+    //   let interimTranscript = "";
+    //   for (let i = event.resultIndex; i < event.results.length; ++i) {
+    //     if (event.results[i].isFinal) {
+    //       const finalTranscript = event.results[i][0].transcript;
+    //       const formattedMessage = `You: ${finalTranscript}`;
+    //       setChatLog((prevLog) => prevLog + formattedMessage + "\n");
+    //       chatSocket.send(JSON.stringify({ message: finalTranscript }));
+    //     } else {
+    //       interimTranscript += event.results[i][0].transcript;
+    //     }
+    //   }
+    // };
+
+recognitionInstance.onresult = (event) => {
+  let latestTranscript = "";
+  for (let i = event.resultIndex; i < event.results.length; ++i) {
+    if (event.results[i].isFinal) {
+      latestTranscript = event.results[i][0].transcript;
+    }
+  }
+  setCurrentSpokenMessage(latestTranscript);
+};
+
+
+
+    
 
     recognitionInstance.onerror = (event) => {
       console.error("Speech recognition error", event.error);
@@ -433,7 +468,7 @@ const Page = () => {
     const message = inputMessage.trim();
     if (message) {
       chatSocket.send(JSON.stringify({ message: message }));
-      setChatLog((prevLog) => prevLog + `You: ${message}\n`);
+      setChatLog((prevLog) => prevLog + `${message}\n`);
       setInputMessage("");
     }
   };
@@ -451,6 +486,17 @@ const Page = () => {
       setIsAudioPlaying(false);
     }
   };
+
+  useEffect(() => {
+    // Clear current spoken message after a delay (e.g., 3 seconds)
+    const timeoutId = setTimeout(() => {
+      setCurrentSpokenMessage("");
+    }, 3000); // Adjust delay as needed
+
+    // Clean up timeout on component unmount or when currentSpokenMessage changes
+    return () => clearTimeout(timeoutId);
+  }, [currentSpokenMessage]);
+
 
 
   return (
@@ -481,19 +527,29 @@ const Page = () => {
           </div>
         )}
 
-        <input
+        {/* <input
           type="text"
           className="flex-grow p-3 text-white bg-gray-700 border border-gray-600 rounded-lg shadow"
           placeholder="Type your message here..."
           value={inputMessage}
           onChange={(e) => setInputMessage(e.target.value)}
-        />
+        /> */}
+        {/* 
         <div
-          className="text-white"
-          onChange={(e) => setInputMessage(e.target.value)}
-        ></div>
+          className="flex-grow p-3 text-white"
+          style={{ overflowY: "scroll", height: "300px" }}
+        >
+          
+          {chatLog.split("\n").map((message, index) => (
+            <div key={index}>{message}</div>
+          ))}
+        </div> */}
 
-        <div onChange={(e) => setInputMessage(e.target.value)}></div>
+        <div className="flex-grow p-3 text-white">
+          {/* Display current spoken message */}
+          {currentSpokenMessage && <div>{currentSpokenMessage}</div>}
+        </div>
+
         {/* Action Buttons */}
         <div>
           <div className="fixed bottom-0 left-0 right-0 flex justify-center p-4 bg-black">

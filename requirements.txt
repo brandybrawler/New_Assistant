@@ -7,3 +7,4 @@ psycopg2-binary
 gpt4all
 gtts
 python-socketio
+django-cors-headers

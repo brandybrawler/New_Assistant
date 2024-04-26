@@ -32,7 +32,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 
 
@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'core',
     'channels',
     'web',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -58,6 +59,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'voice_assistant.urls'
@@ -90,6 +92,12 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
+
+CORS_ALLOWED_ORIGINS = [
+    "https://*.ngrok-free.app",
+]
+
 
 
 
@@ -142,13 +150,13 @@ STATIC_URL = '/static/'
 print(STATIC_URL)
 
 
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),
-]
+# STATICFILES_DIRS = [
+#     os.path.join(BASE_DIR, 'static'),
+# ]
 
-# Static files root - where files are collected to
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-print(STATIC_ROOT)
+# # Static files root - where files are collected to
+# STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# print(STATIC_ROOT)
 
 
 # Default primary key field type

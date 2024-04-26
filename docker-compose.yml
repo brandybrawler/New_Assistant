@@ -20,7 +20,7 @@ services:
     command: gunicorn voice_assistant.asgi:application --timeout 120 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
     volumes:
       - .:/code
-      - C:/Users/Admin/Desktop/GPT Assistant/voice_assistant/core/templates/core:/code/core/templates/core  # Map the _next folder
+      # - C:/Users/Admin/Desktop/GPT Assistant/voice_assistant/core/templates/core:/code/core/templates/core  # Map the _next folder
 
     ports:
       - "8000:8000"
@@ -31,15 +31,15 @@ services:
       - DATABASE_URL=postgres://postgres:postgres@db:5432/voice_assistant
       - REDIS_URL=redis://redis:6379/0
 
-  node:
-    build: 
-      context: ./web  # Specify the context for the build
-      dockerfile: DOCKERFILE
-    ports:
-      - "3000:3000"  # Expose port 3000
-    depends_on:
-      - db
-      - redis
+  # node:
+  #   build: 
+  #     context: ./web  # Specify the context for the build
+  #     dockerfile: DOCKERFILE
+  #   ports:
+  #     - "3000:3000"  # Expose port 3000
+  #   depends_on:
+  #     - db
+  #     - redis
 
 networks:
   default:

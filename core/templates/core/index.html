@@ -36,42 +36,94 @@
             width: 40px;
             height: 40px;
             animation: spin 2s linear infinite;
+            display: none; /* Initially hidden */
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .star-rating .star {
+            cursor: pointer;
+            color: gray;
+        }
+        .star-rating .star.selected {
+            color: orange;
+        }
+        .hidden {
+            display: none;
+        }
+        #rating-modal .star {
+            cursor: pointer;
+            font-size: 24px;
+            color: gray;
+        }
+        #rating-modal .star.selected {
+            color: gold;
+        }
+        .theme-dark {
+            background-color: #24243e;
+            color: #ffffff;
+        }
+        .theme-light {
+            background-color: #ffffff;
+            color: #24243e;
+        }
     </style>
 </head>
 <body class="bg-tech font-sans leading-normal tracking-normal text-white">
-
     <div class="container mx-auto my-5 p-5">
         <div class="w-full p-6 rounded-lg bg-gray-800 shadow-lg">
             <h1 class="text-3xl font-semibold text-blue-300 text-center text-glow">Voice Assistant Chat</h1>
+            <div id="tenant-details" class="text-xl font-semibold text-center my-2">Tenant: Loading...</div>
+            <div id="user-details" class="text-xl font-semibold text-center my-2">User: Loading...</div>
             <div id="status" class="text-center my-3 text-white font-bold p-2 rounded-lg bg-gray-700">Not Connected</div>
-            <div class="loader hidden mx-auto my-5"></div>
-            <div class="error-message text-red-400 text-center hidden"></div>
+            <div class="loader mx-auto my-5"></div> <!-- Loader shown during connection attempts and processing -->
+            <div class="error-message text-red-400 text-center hidden">Connection error. Please try again.</div>
             <div class="recognition-feedback bg-gray-700 text-blue-200 text-center p-3 rounded-lg hidden">Listening...</div>
-            
+
             <textarea id="chat-log" class="w-full p-3 h-64 bg-gray-700 border border-gray-600 rounded-lg shadow-inner mt-4 text-white" readonly aria-live="polite"></textarea>
-            
+
             <div class="flex items-center my-4">
                 <input id="chat-message-input" type="text" class="flex-grow p-3 border border-gray-600 rounded-lg shadow bg-gray-700 text-white" placeholder="Type your message here..." aria-label="Message Input">
                 <button id="chat-message-submit" class="ml-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg button-glow soft-shadow">Send</button>
             </div>
 
             <div class="flex justify-between">
-                <button id="start" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg button-glow">Start Voice Input</button>
-                <button id="stop" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg button-glow" disabled>Stop Voice Input</button>
+                <button id="start" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg button-glow">Start Call</button>
+                <button id="stop" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg button-glow" disabled>Stop Call</button>
             </div>
-            
+
+            <div id="call-status" class="text-center mt-2">
+                <p id="call-duration" class="text-sm font-medium">Call Duration: 00:00</p>
+            </div>
+
             <audio id="response-audio" controls hidden class="mt-4 w-full"></audio>
+        </div>
+    </div>
+
+    <!-- Rating Modal -->
+    <div id="rating-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex justify-center items-center">
+        <div class="bg-white p-4 rounded-lg">
+            <h2 class="text-xl font-bold">Rate the Call</h2>
+            <div class="flex justify-center my-4">
+                <!-- Star icons for rating -->
+                <span class="star" data-rate="1">&#9733;</span>
+                <span class="star" data-rate="2">&#9733;</span>
+                <span class="star" data-rate="3">&#9733;</span>
+                <span class="star" data-rate="4">&#9733;</span>
+                <span class="star" data-rate="5">&#9733;</span>
+            </div>
+            <button id="close-modal" class="mt-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Close</button>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.11/dist/tailwind.min.js"></script>
     <script>
-        const chatSocket = new WebSocket('wss://' + window.location.host + '/ws/chat/');
+        
+        // auth_uri=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZXhwIjoxNzE4OTY1MjM3fQ.sNdtqBGxYGxHFou3sTB7ero89-bpEbzrgAzTfFSv9LA
+        // user_uri=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZXhwIjoxNzE4OTY0NTM5fQ.4pwAHvuAG5XpInOW4VUuqiZcrIYfdDlBa2GPDlOPwiU
+
+        let chatSocket;
         const startButton = document.getElementById('start');
         const stopButton = document.getElementById('stop');
         const inputField = document.getElementById('chat-message-input');
@@ -81,63 +133,192 @@
         const loader = document.querySelector('.loader');
         const errorMessage = document.querySelector('.error-message');
         const recognitionFeedback = document.querySelector('.recognition-feedback');
-        
-        let isAudioPlaying = false;
+        const tenantDetailsElement = document.getElementById('tenant-details');
+        const userDetailsElement = document.getElementById('user-details');
+        const chatMessageInput = document.getElementById('chat-message-input');
+        const chatMessageSubmit = document.getElementById('chat-message-submit');
+        let callTimer = null;
+        let callSeconds = 0;
+        let authTokenUser = '';
+        let authTokenTenant = '';
+        let selectedRating = 0;
+        let tenantId = null;
+        let tenantName = null;
+        let industry = null;
+        let subCategory = null;
+        let userId = 0;
+        let username = null;
+        let firstName = null;
+        let lastName = null;
+        let userEmail = null;
+        let userToken = null;
+        let userType = null;
+        let messagesFromServer = [];
+        let messagesFromUser = [];
+        let calls_id = null;
 
-        chatSocket.onopen = function() {
-            statusIndicator.textContent = 'Connected';
-            statusIndicator.className = 'text-center my-3 text-white font-bold p-2 rounded-lg bg-green-600';
-        };
-    
-        chatSocket.onmessage = function(e) {
-            const data = JSON.parse(e.data);
-            chatLog.value += 'Server: ' + data.message + '\n';
-            if (data.audio_url) {
-                audioElement.src = data.audio_url;
-                audioElement.hidden = false;
-                audioElement.play();
-                isAudioPlaying = true;
-                recognition.stop();
-            }
-        };
-    
-        audioElement.onended = function() {
-            audioElement.hidden = true;
-            audioElement.src = '';
-            if (!isAudioPlaying) {
-                startButton.disabled = false;
+        function fetchAuthTokens() {
+            const urlParams = new URLSearchParams(window.location.search);
+            authTokenUser = urlParams.get("user_uri");
+            authTokenTenant = urlParams.get("auth_uri");
+        }
+
+        function fetchTenantDetails() {
+            if (!authTokenTenant) return;
+            fetch(`https://core.proximaai.co/api/tenantmanagement/tenantdetails/?token=${authTokenTenant}`)
+            .then(response => response.json())
+            .then(data => {
+                // Update global variables with the fetched data
+                tenantId = data.tenant_id;
+                tenantName = data.tenant_name;
+                industry = data.industry;
+                subCategory = data.sub_category || 'Not specified';
+
+                // Update the content of tenantDetailsElement with the tenant name
+                tenantDetailsElement.textContent = `Tenant: ${tenantName}`;
+
+                // Log for debugging
+                console.log(`Tenant details: ID ${tenantId}, Name ${tenantName}, Industry ${industry}, Sub-category ${subCategory}`);
+            })
+            .catch(error => {
+                console.error("Failed to fetch tenant details:", error);
+                tenantDetailsElement.textContent = "Tenant details not available.";
+            });
+        }
+
+        function fetchUserDetails() {
+            if (!authTokenUser) return;
+            fetch(`https://core.proximaai.co/api/auth/decodeusertoken/?token=${authTokenUser}`)
+            .then(response => response.json())
+            .then(data => {
+                // Update global variables with the fetched data
+                userId = data.id;
+                username = data.username;
+                firstName = data.first_name;
+                lastName = data.last_name;
+                userEmail = data.email;
+                userToken = data.token;
+                userType = data.user_type;
+
+                    // this is the expected response
+                // email: "o.becks45@gmail.com"
+                // first_name: "Beckham"
+                // id: "1"
+                // last_name:  "Ochieng"
+                // token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZXhwIjoxNzE5MzA1NTAwfQ.lrYDIq_jSBXPhcjj2Xg5LWgpIvVc_m3zuVxsJCXz4PA"
+                // user_type: "admin"
+                // username: "BeckhamMSK"
+                
+                
+
+                // Update the content of userDetailsElement with the username
+                userDetailsElement.textContent = `User: ${username}`;
+
+                // Log for debugging
+                console.log(`Logged in user: ${firstName} ${lastName} (${userType})`);
+            })
+            .catch(error => {
+                console.error("Failed to fetch user details:", error);
+                userDetailsElement.textContent = "User details not available.";
+            });
+        }
+
+        function formatDuration(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateCallDuration() {
+            document.getElementById('call-duration').textContent = `Call Duration: ${formatDuration(callSeconds)}`;
+            callSeconds++;
+        }
+
+        function startCallTimer() {
+            callSeconds = 0; // Reset timer
+            updateCallDuration();
+            callTimer = setInterval(updateCallDuration, 1000);
+        }
+
+        function stopCallTimer() {
+            clearInterval(callTimer);
+            console.log(`Call ended. Total duration was: ${formatDuration(callSeconds)}`);
+            setTimeout(showRatingModal, 2000); // Show the rating modal 2 seconds after the call ends
+        }
+
+        function connectWebSocket() {
+            loader.style.display = 'block'; // Show loader when connecting
+            chatSocket = new WebSocket('ws://' + window.location.host + '/ws/chat/');
+            chatSocket.onopen = function() {
+                statusIndicator.textContent = 'Connected';
+                statusIndicator.className = 'text-center my-3 text-white font-bold p-2 rounded-lg bg-green-600';
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                loader.style.display = 'none'; // Hide loader after connection
+                fetchAuthTokens();
+                fetchTenantDetails();
+                fetchUserDetails();
+                startCallTimer(); // Start call timer
                 recognition.start();
+            };
+
+            chatSocket.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                chatLog.value += 'Server: ' + data.message + '\n';
+                messagesFromServer.push(data.message); // Store server message globally
+                if (data.audio_url) {
+                    audioElement.src = data.audio_url;
+                    audioElement.hidden = true;
+                    audioElement.play();
+                    isAudioPlaying = true;
+                    recognition.stop();
+                    
+                }
+            };
+            
+            audioElement.onended = function() {
+                recognition.stop();  // Ensure recognition is stopped
+                stopButton.disabled = false;
+                console.log("Audio playback ended, recognition stopped.");
+            };
+
+
+            chatSocket.onclose = function(e) {
+                statusIndicator.textContent = 'Not Connected';
+                statusIndicator.className = 'text-center my-3 text-white font-bold p-2 rounded-lg bg-red-600';
+                errorMessage.textContent = 'Connection closed unexpectedly';
+                errorMessage.style.display = 'block';
+                console.error('Chat socket closed unexpectedly');
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                stopCallTimer(); // Stop call timer
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (chatSocket) {
+                chatSocket.close();
             }
-            isAudioPlaying = false;
-        };
-    
-        audioElement.oninterrupted = audioElement.onended;
-    
-        chatSocket.onclose = function(e) {
-            statusIndicator.textContent = 'Not Connected';
-            statusIndicator.className = 'text-center my-3 text-white font-bold p-2 rounded-lg bg-red-600';
-            errorMessage.textContent = 'Connection closed unexpectedly';
-            errorMessage.style.display = 'block';
-            console.error('Chat socket closed unexpectedly');
-        };
-    
+        }
+
         document.getElementById('chat-message-submit').onclick = function(e) {
             const message = inputField.value;
             chatSocket.send(JSON.stringify({'message': message}));
             inputField.value = '';
             chatLog.value += 'You: ' + message + '\n';
+            messagesFromUser.push(message); // Store user message globally
         };
-    
+
         var recognition;
         if ('webkitSpeechRecognition' in window) {
             recognition = new webkitSpeechRecognition();
         } else if ('SpeechRecognition' in window) {
             recognition = new SpeechRecognition();
         }
-        
+
         recognition.continuous = true;
         recognition.interimResults = true;
-    
+
         recognition.onresult = function(event) {
             let interim_transcript = '';
             for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -151,7 +332,7 @@
             }
             inputField.value = interim_transcript;
         };
-    
+
         recognition.onerror = function(event) {
             console.error('Speech recognition error', event.error);
             stopButton.disabled = true;
@@ -159,26 +340,275 @@
             errorMessage.textContent = 'Speech recognition error: ' + event.error;
             errorMessage.style.display = 'block';
         };
-    
+
         recognition.onend = function() {
             stopButton.disabled = true;
             startButton.disabled = false;
             recognitionFeedback.style.display = 'none';
         };
-    
-        startButton.onclick = function() {
-            recognition.start();
-            this.disabled = true;
-            stopButton.disabled = false;
-            recognitionFeedback.style.display = 'block';
-        };
-    
+
+        startButton.onclick = connectWebSocket
+
         stopButton.onclick = function() {
             recognition.stop();
-            this.disabled = true;
             startButton.disabled = false;
             recognitionFeedback.style.display = 'none';
+            disconnectWebSocket();
+            stopCallTimer();
+            // endCall();
+            this.disabled = true;
         };
+
+        function showRatingModal() {
+            document.getElementById('rating-modal').classList.remove('hidden');
+        }
+
+        // Declare a global variable to store the call ID
+
+        // Function to end a call
+        function endCall() {
+            const requestBody = {
+                duration: callSeconds * 1000, // assuming callSeconds is defined elsewhere
+                tenant_id: tenantId,          // assuming tenantId is defined elsewhere
+                success: true,
+                client_caller: userId         // assuming userId is defined elsewhere
+            };
+
+            fetch("https://core.proximaai.co/api/call/call/calls/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Token ${authTokenUser}`, // assuming authTokenUser is defined elsewhere
+                },
+                body: JSON.stringify(requestBody),
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json(); // Parse response JSON
+                } else {
+                    throw new Error(`HTTP error! Status: ${response.status}`); // Throw error for non-200 status codes
+                }
+            })
+            .then(data => {
+                console.log("POST request succeeded with JSON response:", data);
+                calls_id = data.call_id; // Update call_id globally
+                submitFeedback(); 
+            })
+            .catch(error => {
+                console.error("Error making POST request:", error);
+                // Uncomment below to enable user feedback on error
+                // alert("Error ending call. Please try again later.");
+            });
+        }
+
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const stars = document.querySelectorAll('#rating-modal .star');
+            stars.forEach(star => {
+                star.addEventListener('click', function() {
+                    stars.forEach(s => s.classList.remove('selected'));
+                    this.classList.add('selected');
+                    selectedRating = parseInt(this.getAttribute('data-rate')); // Correctly update rating
+                    console.log('Selected Rating:', selectedRating);
+                });
+            });
+
+            document.getElementById('close-modal').addEventListener('click', closeRatingModal);
+        });
+
+        function closeRatingModal() {
+            document.getElementById('rating-modal').classList.add('hidden');
+
+            // Always execute these actions when the modal is closed
+            resolveCall();
+            submitCallMetrics();
+            endCall();
+
+
+            
+            // You could still log the selectedRating, if needed, for debugging
+            console.log("Rating (selected or not):", selectedRating);
+        }
+
+
+        function submitFeedback() {
+            const feedbackBody = {
+                rating: selectedRating,  // Directly use the global variable
+                feedback_text: "Great service!",
+                feedback_category: "service",
+                call: calls_id  // Make sure this is set correctly before calling this function
+            };
+
+            fetch("https://core.proximaai.co/api/call/call/customer-feedback/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Token ${authTokenUser}`  // Ensure authTokenUser is correctly set globally
+                },
+                body: JSON.stringify(feedbackBody)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Feedback submitted successfully", data);
+            })
+            .catch(error => {
+                console.error("Failed to submit feedback:", error);
+            });
+        }
+
+
+
+        function stopCall() {
+            recognition.stop();
+            stopButton.disabled = true;
+            startButton.disabled = false;
+            recognitionFeedback.style.display = 'none';
+            disconnectWebSocket();
+            
+            // Prepare data for posting the call details
+            const requestBody = {
+                duration: callSeconds, // Call duration in milliseconds
+                tenant_id: tenantId, // Replace with the actual tenant ID, if available
+                success: true, // Set the status of the call, consider dynamic status based on the actual call
+                client_caller: userId // Replace with the actual client caller ID, if available
+            };
+
+            // Post the call details
+            fetch("https://core.proximaai.co/api/call/call/calls/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Token ${authTokenUser}`
+                },
+                body: JSON.stringify(requestBody)
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json(); // Parse response JSON
+                } else {
+                    throw new Error(`HTTP error! Status: ${response.status}`); // Handle HTTP errors
+                }
+            })
+            .then(data => {
+                console.log("POST request succeeded with JSON response:", data);
+                // alert("Call ended successfully!");
+                stopCallTimer(); // Stop the call timer when the call is successfully logged
+            })
+            .catch(error => {
+                console.error("Error making POST request:", error);
+                // alert("Error ending call. Please try again later.");
+            });
+        }
+
+        stopButton.onclick = function() {
+            stopCall();
+        };
+
+
+        // Function to resolve a call
+        function resolveCall() {
+            const resolutionBody = {
+                status: "resolved",
+                pending_actions: "None",
+                follow_up_required: false,
+                follow_up_date: "2024-04-18T09:09:12.802",
+                call: userId
+            };
+
+            fetch("https://core.proximaai.co/api/call/call/call-resolution/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Token ${authTokenUser}`
+                },
+                body: JSON.stringify(resolutionBody)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Call resolved successfully", data);
+            })
+            .catch(error => {
+                console.error("Failed to resolve call:", error);
+            });
+        }
+
+
+
+        function submitCallMetrics() {
+            const metrics = {
+                transcripts: [
+                    { user: messagesFromUser }, // Log user message
+                    { bot: messagesFromServer }, // Log bot message
+                ],
+                call_satisfaction: true,
+                issue_resolution: true,
+                call: userId,
+                };
+
+            fetch("https://core.proximaai.co/api/call/call/call-metrics/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Token ${authTokenUser}`,
+                },
+                body: JSON.stringify(metrics),
+            })
+            .then((response) => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+            })
+            .then((data) => {
+                console.log("POST request succeeded with JSON response:", data);
+                // alert("Rate successfully!");
+            })
+            .catch((error) => {
+                console.error("Error making POST request:", error);
+            });
+        }
+
+
     </script>
 </body>
 </html>
+
+
+
+
+
+<!-- <div id="rating-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex justify-center items-center">
+    <div class="bg-white p-4 rounded-lg">
+        <h2 class="text-xl font-bold">Rate the Call</h2>
+        <div class="flex justify-center my-4">
+
+            <span class="star" data-rate="1" onclick="setRating(1)" title="Poor">&#9733;</span>
+            <span class="star" data-rate="2" onclick="setRating(2)" title="Fair">&#9733;</span>
+            <span class="star" data-rate="3" onclick="setRating(3)" title="Good">&#9733;</span>
+            <span class="star" data-rate="4" onclick="setRating(4)" title="Very Good">&#9733;</span>
+            <span class="star" data-rate="5" onclick="setRating(5)" title="Excellent">&#9733;</span>
+        </div>
+        <label for="feedback" class="block text-sm font-bold">Your Feedback:</label>
+        <textarea id="feedback" rows="4" class="w-full p-2 border rounded focus:outline-none" placeholder="What did you think of our service?"></textarea>
+        <label for="feedback-category" class="block mt-2 text-sm font-bold">Feedback Category:</label>
+        <select id="feedback-category" class="w-full p-2 border rounded">
+            <option value="">Select a category...</option>
+            <option value="services">Services</option>
+        </select>
+        <div class="mt-2">
+            <input type="checkbox" id="follow-up" class="mr-2">
+            <label for="follow-up" class="text-sm font-bold">Require Follow-up?</label>
+        </div>
+        <div class="flex justify-between mt-3">
+            <button onclick="submitFeedback()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Submit Feedback</button>
+            <button onclick="closeModal()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Close</button>
+        </div>
+    </div>
+</div> -->
